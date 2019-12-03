@@ -18,7 +18,7 @@
 #define TempSensor_Vpin         V11 
 #define TempTimeout_Vpin        V12  
 #define TempShowNow_Vpin        V13 
-// V14 Spare
+#define Distance_Vpin           V14
 #define JoystickInput_Vpin      V15 
 // V16 - V17 spare
 #define SwitchA_Vpin            V18

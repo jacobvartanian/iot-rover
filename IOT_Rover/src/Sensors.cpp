@@ -58,6 +58,12 @@ int SensorsClass::AccTID;
 uint32_t SensorsClass::StepCount;
 uint8_t SensorsClass::Orientation;
 
+// Time of Flight
+#define Tof_RunInerval      1000
+Distance SensorsClass::_TofSensor;
+int SensorsClass::_TofTID;
+uint16_t SensorsClass::RawDistance;
+
 //=============================================================================
 // Class Member Method Definitions (static)
 //-----------------------------------------------------------------------------
@@ -139,6 +145,16 @@ void SensorsClass::Init(EC_12S_t *const errorCodePtr) {
         // Log an error if Pedometer.Init() failed
         ErrorCode_12SLog(errorCodePtr, pedometerSuccess == false);
     }
+
+    // Setup the Time of Flight sensor
+    byte tofSuccess = false;
+    if (_TofSensor.Init()) {
+        tofSuccess = true;
+        TofRun();   // Run the accelerometer once, schedule for periodic run
+        _TofTID = GlobalTimer.setInterval(Tof_RunInerval, TofRun);
+    }
+    // Log an error if Distance.Init() failed
+    ErrorCode_12SLog(errorCodePtr, tofSuccess == false);
 }
 
 void SensorsClass::ShowOnDisplay(uint8_t const show, uint8_t const vpin) {
@@ -158,6 +174,8 @@ void SensorsClass::ShowOnDisplay(uint8_t const show, uint8_t const vpin) {
         Display.SetNumber(show, StepCount);
     } else if (vpin == Orientation_Vpin) {
         Display.SetNumber(show, Orientation);
+    } else if (vpin == Distance_Vpin) {
+        Display.SetNumber(show, GetDistance());
     }
 }
 
@@ -288,6 +306,10 @@ float SensorsClass::GetLightLux() {
     return ConvertLightLux(RawLightLux);
 }
 
+uint16_t SensorsClass::GetDistance() {
+    return RawDistance;
+}
+
 void SensorsClass::AccRun() {    
     // Update pedometer
     _Pedometer.Update();
@@ -313,4 +335,13 @@ void SensorsClass::AccRun() {
 #endif
 }
 
+void SensorsClass::TofRun() {
+    // Update distance reading
+    RawDistance = _TofSensor.GetDistance();
+    if (DeviceConfig.getDisplay()) {
+        if (ShowOnDisplayPrimary == Distance_Vpin) {
+            ShowOnDisplay(Display_PRIMARY_Show, ShowOnDisplayPrimary);
+        }
+    }
+}
 // Sensors.cpp EOF

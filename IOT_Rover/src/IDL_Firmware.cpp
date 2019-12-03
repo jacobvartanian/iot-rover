@@ -48,7 +48,7 @@ int PushServerTID = -1;
 
 // Push data to the Blynk server configuration
 const uint32_t DefaultPushInterval = 10000;
-const uint8_t ThingsToPush = 10;
+const uint8_t ThingsToPush = 11;
 
 //*****************************************************************************
 // Private Function Declarations
@@ -150,7 +150,8 @@ BLYNK_CONNECTED() {
         Blynk.virtualWrite(Temperature_Vpin, Sensors.GetTemperature());
         Blynk.virtualWrite(Humidity_Vpin, Sensors.GetHumidity());   
         Blynk.virtualWrite(BatteryVoltage_Vpin, Sensors.GetBatteryVoltage()); 
-        Blynk.virtualWrite(LightLux_Vpin, Sensors.GetLightLux()); 
+        Blynk.virtualWrite(LightLux_Vpin, Sensors.GetLightLux());
+        Blynk.virtualWrite(Distance_Vpin, Sensors.GetDistance()); 
 
         // Go into deep sleep for a 60 secs.
         WiFi.mode( WIFI_OFF );
@@ -435,9 +436,11 @@ void PushDataToBlynkServer(void) {
             break;
         case 7: Blynk.virtualWrite(Orientation_Vpin, Sensors.Orientation);
             break;
-        case 8: Blynk.virtualWrite(UpTimeRead_Vpin, (millis() / 1000));
+        case 8: Blynk.virtualWrite(Distance_Vpin, Sensors.GetDistance());
             break;
-        case 9: 
+        case 9: Blynk.virtualWrite(UpTimeRead_Vpin, (millis() / 1000));
+            break;
+        case 10: 
             Blynk.virtualWrite(WiFiName_Vpin, WiFi.SSID());
             Blynk.virtualWrite(WiFiRSSI_Vpin, WiFi.RSSI());
             Blynk.virtualWrite(LocalIP_Vpin, WiFi.localIP().toString());
