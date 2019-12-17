@@ -15,6 +15,7 @@
 #include "DHTesp.h"
 #include "pedometer.h"
 #include "Display.h"
+#include "Distance.h"
 
 //=============================================================================
 // Class Declaration
@@ -48,6 +49,10 @@ class SensorsClass
     static float GetBatteryVoltage();
     static float GetLightLux();
 
+    // Distance sensor
+    static uint16_t RawDistance;
+    static uint16_t GetDistance();
+
     // Accelerometer
     static int AccTID;
     static uint32_t StepCount;
@@ -63,6 +68,9 @@ class SensorsClass
     static void AnalogRun();
     static TPedometer _Pedometer;
     static void AccRun();
+    static Distance _TofSensor;
+    static int _TofTID;
+    static void TofRun();
 };
 
 //=============================================================================
