@@ -15,7 +15,6 @@
 #include "DHTesp.h"
 #include "pedometer.h"
 #include "Display.h"
-#include "Distance.h"
 
 //=============================================================================
 // Class Declaration
@@ -31,8 +30,11 @@ class SensorsClass
     // DHT11 Sensor
     static uint16_t RawTemperature;
     static uint16_t RawHumidity;
+    static uint8_t GetDhtPin();
     static float ConvertTemperature(uint16_t const rawT);
     static float ConvertHumidity(uint16_t const rawH);
+    static void SetTemperatureOffset(float const offset);
+    static void SetHumidityOffset(float const offset);
     static float GetTemperature();
     static float GetHumidity();
     static float GetHeatIndex();
@@ -46,10 +48,6 @@ class SensorsClass
     static float GetBatteryVoltage();
     static float GetLightLux();
 
-    // Distance sensor
-    static uint16_t RawDistance;
-    static uint16_t GetDistance();
-
     // Accelerometer
     static int AccTID;
     static uint32_t StepCount;
@@ -57,18 +55,14 @@ class SensorsClass
 
     private:
     static DHTesp _Dhtesp;
-    static DHTesp::DHT_MODEL_t _DhtModel;
-    static uint8_t _DhtPin;
-    static uint16_t _DhtRunInerval;
+    static float _tempOffset;
+    static float _humOffset;
     static int _DhtTID;
     static void DhtRun();
     static int _AnalogTID;
     static void AnalogRun();
     static TPedometer _Pedometer;
     static void AccRun();
-    static Distance _TofSensor;
-    static int _TofTID;
-    static void TofRun();
 };
 
 //=============================================================================

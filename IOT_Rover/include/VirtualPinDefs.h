@@ -18,9 +18,9 @@
 #define TempSensor_Vpin         V11 
 #define TempTimeout_Vpin        V12  
 #define TempShowNow_Vpin        V13 
-#define Distance_Vpin           V14
+// V14 Spare
 #define JoystickInput_Vpin      V15 
-// V16 - V17 spare
+// V16 - V17 Spare
 #define SwitchA_Vpin            V18
 #define SwitchB_Vpin            V19
 #define PushPeriod_Vpin         V20
@@ -38,6 +38,15 @@
 #define WiFiName_Vpin           V32
 #define WiFiRSSI_Vpin           V33
 #define LocalIP_Vpin            V34
+#define TempOffset_Vpin         V35
+#define HumOffset_Vpin          V36
+// V37 - V39 Spare
+#define MobilityStatus_Vpin     V40
+#define MobilityJoy_Vpin        V41
+#define MobilitySpeed_Vpin      V42
+#define MobilitySteer_Vpin      V43
+#define MobilityFLAddr_Vpin     V44
+#define MobilityFRAddr_Vpin     V45
 
 #endif /* VirtualPinDefs_h */
 

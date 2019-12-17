@@ -46,8 +46,7 @@ typedef enum
 typedef enum
 {
     DC_Enviro_Off = 0,
-    DC_Enviro_DHT11_2 = 1,
-    DC_Enviro_AM2302_12 = 2
+    DC_Enviro_DHT11_AM2302_12_2 = 1,
 } DC_Enviro;
 
 // Analog Sensor Configuration

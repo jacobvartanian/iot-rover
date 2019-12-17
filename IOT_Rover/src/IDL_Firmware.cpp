@@ -8,12 +8,14 @@
 #include <ESP8266WiFi.h>
 #define BLYNK_PRINT Serial
 #include <BlynkSimpleEsp8266.h>
+#include "IDL_Version.h"
 #include "ErrorCode.h"
 #include "Planque.h"
 #include "WiFiMgmt.h"
 #include "DeviceConfig.h"
 #include "Display.h"
 #include "Sensors.h"
+#include "Mobility.h"
 #include "VirtualPinDefs.h"
 
 //*****************************************************************************
@@ -42,13 +44,13 @@ bool ToggleStateB = false;
 uint8_t MenuDisplayMode = 0x00;
 uint32_t TemporaryTimeout = 3000;
 
-// Blynk timer
-BlynkTimer GlobalTimer;
+// Blynk timer 
+BlynkTimer GlobalTimer; 
 int PushServerTID = -1;
 
 // Push data to the Blynk server configuration
 const uint32_t DefaultPushInterval = 10000;
-const uint8_t ThingsToPush = 11;
+const uint8_t ThingsToPush = 10;
 
 //*****************************************************************************
 // Private Function Declarations
@@ -67,7 +69,8 @@ void setup() {
     // Debug console
     Serial.begin(115200);
     Serial.println("\n\rIDL Firmware Boot!");
-
+    Serial.println(IDL_Version_Software);
+    
     // Init usage of non volatile memory.
     Planque.Init();
 
@@ -102,7 +105,7 @@ void setup() {
         WiFiMgmt.EnterSoftAP();
     }
 
-    if (DeviceConfig.getPower() == DC_Power_UploadThenDeepSleep && DeviceConfig.getEnviro() != DC_Enviro_DHT11_2) {
+    if (DeviceConfig.getPower() == DC_Power_UploadThenDeepSleep && Sensors.GetDhtPin() != 2u) {
         // Blue LED on
         pinMode(2, OUTPUT);
         digitalWrite(2, LOW);
@@ -136,7 +139,7 @@ BLYNK_CONNECTED() {
 
     if (DeviceConfig.getPower() == DC_Power_EverythingAlwaysOn) {   
         Blynk.setProperty(DisplayMode_Vpin, "labels", "Text", "Number", "U64", "Show Sensor", "Joystick", "Joystick (Persistent)", "All LED's On", "All LED's Off", "Display off");
-        Blynk.syncVirtual(DisplayMode_Vpin, Brightness_Vpin, ScrollRate_Vpin, ScrollEnable_Vpin, TempTimeout_Vpin, PushPeriod_Vpin, PushEnable_Vpin);
+        Blynk.syncVirtual(DisplayMode_Vpin, Brightness_Vpin, ScrollRate_Vpin, ScrollEnable_Vpin, TempTimeout_Vpin, PushPeriod_Vpin, PushEnable_Vpin, TempOffset_Vpin, HumOffset_Vpin, MobilityFLAddr_Vpin, MobilityFRAddr_Vpin);
 
         Blynk.virtualWrite(SwitchA_Vpin, 255*ToggleStateA);
         Blynk.virtualWrite(SwitchB_Vpin, 255*ToggleStateB);
@@ -150,14 +153,13 @@ BLYNK_CONNECTED() {
         Blynk.virtualWrite(Temperature_Vpin, Sensors.GetTemperature());
         Blynk.virtualWrite(Humidity_Vpin, Sensors.GetHumidity());   
         Blynk.virtualWrite(BatteryVoltage_Vpin, Sensors.GetBatteryVoltage()); 
-        Blynk.virtualWrite(LightLux_Vpin, Sensors.GetLightLux());
-        Blynk.virtualWrite(Distance_Vpin, Sensors.GetDistance()); 
+        Blynk.virtualWrite(LightLux_Vpin, Sensors.GetLightLux()); 
 
         // Go into deep sleep for a 60 secs.
         WiFi.mode( WIFI_OFF );
         WiFi.forceSleepBegin();
         delay(1);
-        if (DeviceConfig.getEnviro() != DC_Enviro_DHT11_2) {
+        if (Sensors.GetDhtPin() != 2u) {
             // Blue LED off
             digitalWrite(2, HIGH);
         }
@@ -353,7 +355,7 @@ BLYNK_WRITE(TempShowNow_Vpin) {
         Display.ActivateTempShow(TemporaryTimeout);
 }
 
-// Android/iPhone app is giving us new joystick location information. 
+// Android/iPhone app is giving us new joystick location information.
 BLYNK_WRITE(JoystickInput_Vpin) {
     if (!param.isEmpty() && (MenuDisplayMode == 0x04 || MenuDisplayMode == 0x05)) {
         if (MenuDisplayMode == 0x04)
@@ -380,12 +382,87 @@ BLYNK_WRITE(PushEnable_Vpin) {
     } 
 }
 
+// Android/iPhone app is giving us a new temperature offset.
+BLYNK_WRITE(TempOffset_Vpin) {
+    if (!param.isEmpty())
+        Sensors.SetTemperatureOffset(param.asFloat());
+}
+
+// Android/iPhone app is giving us a new humidity offset.
+BLYNK_WRITE(HumOffset_Vpin) {
+    if (!param.isEmpty())
+        Sensors.SetHumidityOffset(param.asFloat());
+}
+
+// New Mobility Stuff
+// Work in progress
+// Develop work
+// There appears to be an android Joystick bug.
+// Regarding write interval.
+// There is no write interval on the IOS app. This seems to work fine.
+
+BLYNK_WRITE(MobilityStatus_Vpin) { 
+    Serial.println("MobilityStatus_Vpin"); 
+    Mobility.PrintMotorFaults();
+}
+
+// Joystick
+BLYNK_WRITE(MobilityJoy_Vpin) {
+    if (!param.isEmpty()) {
+        int8_t steer = param[0].asInt();
+        int8_t speed = param[1].asInt();
+
+        Mobility.SetDrive(speed, steer);
+    }
+}
+
+int8_t Temp_Dev_Speed = 0;
+int8_t Temp_Dev_Steer = 0;
+
+// Speed
+BLYNK_WRITE(MobilitySpeed_Vpin) { 
+    if (!param.isEmpty()){ 
+        Temp_Dev_Speed = param.asInt();
+
+        Mobility.SetDrive(Temp_Dev_Speed, Temp_Dev_Steer);
+    } 
+} 
+
+// Steer
+BLYNK_WRITE(MobilitySteer_Vpin) { 
+    if (!param.isEmpty()){ 
+        Temp_Dev_Steer = param.asInt();
+
+        Mobility.SetDrive(Temp_Dev_Speed, Temp_Dev_Steer);
+    } 
+}
+
+// Front Left Address
+BLYNK_WRITE(MobilityFLAddr_Vpin) {
+    if (!param.isEmpty() && param.asInt() <= DRV8830_Addr8 &&
+        param.asInt() >= DRV8830_Addr0) {
+        Mobility.SetMotorAddr(Mobility_FrontLeftMotor,
+                              (DRV8830_Address)param.asInt());
+    }
+}
+
+// Front Right Address
+BLYNK_WRITE(MobilityFRAddr_Vpin) {
+    if (!param.isEmpty() && param.asInt() <= DRV8830_Addr8 &&
+        param.asInt() >= DRV8830_Addr0) {
+        Mobility.SetMotorAddr(Mobility_FrontRightMotor,
+                              (DRV8830_Address)param.asInt());
+    }
+}
+
 //*****************************************************************************
 // Private Function Definitions
 //-----------------------------------------------------------------------------
 void NotifyBlynk(const bool status) {
     if (status && DeviceConfig.ValidBlynk) {
         if (!Blynk.connected()) {
+            Serial.print("Blynk Token: ");
+            Serial.println(DeviceConfig.BlynkTokenNv);
             Blynk.config(DeviceConfig.BlynkTokenNv, Blynk_Server, Blynk_Port);
             Blynk.connect();
         }
@@ -436,11 +513,9 @@ void PushDataToBlynkServer(void) {
             break;
         case 7: Blynk.virtualWrite(Orientation_Vpin, Sensors.Orientation);
             break;
-        case 8: Blynk.virtualWrite(Distance_Vpin, Sensors.GetDistance());
+        case 8: Blynk.virtualWrite(UpTimeRead_Vpin, (millis() / 1000));
             break;
-        case 9: Blynk.virtualWrite(UpTimeRead_Vpin, (millis() / 1000));
-            break;
-        case 10: 
+        case 9: 
             Blynk.virtualWrite(WiFiName_Vpin, WiFi.SSID());
             Blynk.virtualWrite(WiFiRSSI_Vpin, WiFi.RSSI());
             Blynk.virtualWrite(LocalIP_Vpin, WiFi.localIP().toString());

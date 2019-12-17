@@ -263,7 +263,7 @@ void DisplayClass::ScrollString() {
     
     uint8_t stringLength = _Mode[_Show] == Display_U64_Mode ? _U64ImageCount[_Show] : _StringLength[_Show];
     if (_ScrollWindow > 8) {
-        _ScrollWindow = 0;
+        _ScrollWindow = 1;
         _ScrollElement++;
 
         if (_ScrollElement > stringLength + 1)

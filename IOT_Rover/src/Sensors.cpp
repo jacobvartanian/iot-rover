@@ -31,19 +31,18 @@ uint8_t SensorsClass::ShowOnDisplayPrimary = 0x00;
 
 // DHT11
 // #define DHT11_Debug         1
-// #define _DhtPin           2
-// #define _DhtRunInerval    1500
+#define DhtPin_V11 2u   // Hardware pin for DHT11, on PCB V1.1
+#define DhtPin_V13 12u  // Hardware pin for DHT11 and DHT22|AM2302, on PCB V1.2 and V1.3
 DHTesp SensorsClass::_Dhtesp;
-DHTesp::DHT_MODEL_t SensorsClass::_DhtModel;
-uint8_t SensorsClass::_DhtPin;
-uint16_t SensorsClass::_DhtRunInerval;
-int SensorsClass::_DhtTID;
+int SensorsClass::_DhtTID = -1;
+float SensorsClass::_tempOffset = 0;
+float SensorsClass::_humOffset = 0;
 uint16_t SensorsClass::RawTemperature;
 uint16_t SensorsClass::RawHumidity;
 
 // Analog Sensors 
 // #define Analog_Debug        1
-#define Analog_SelectPin    14
+#define Analog_SelectPin    14u
 #define Analog_ReadPin      A0
 #define Analog_RunInerval   1000
 int SensorsClass::_AnalogTID;
@@ -58,38 +57,20 @@ int SensorsClass::AccTID;
 uint32_t SensorsClass::StepCount;
 uint8_t SensorsClass::Orientation;
 
-// Time of Flight
-#define Tof_RunInerval      1000
-Distance SensorsClass::_TofSensor;
-int SensorsClass::_TofTID;
-uint16_t SensorsClass::RawDistance;
-
 //=============================================================================
 // Class Member Method Definitions (static)
 //-----------------------------------------------------------------------------
 void SensorsClass::Init(EC_12S_t *const errorCodePtr) {
 
-    // First prepare if an environment sensor if it is attached
-    if (DeviceConfig.getEnviro() == DC_Enviro_DHT11_2) {
-        #ifdef DHT11_Debug
-            Serial.println("DHT11 on pin 2");
-        #endif
-        _DhtModel = DHTesp::DHT11;
-        _DhtPin = 2;
-        _DhtRunInerval = 1500;
-    } else if (DeviceConfig.getEnviro() == DC_Enviro_AM2302_12) {
-        #ifdef DHT11_Debug
-            Serial.println("AM2302 on pin 12");
-        #endif
-        _DhtModel = DHTesp::AM2302;
-        _DhtPin = 12;
-        _DhtRunInerval = 2200;
-    }
+    uint16_t runInerval = 0u;
     
-    // Force _DhtPin high to end a previous transaction
-    if (DeviceConfig.getEnviro() == DC_Enviro_DHT11_2 || DeviceConfig.getEnviro() == DC_Enviro_AM2302_12) {        
-        digitalWrite(_DhtPin, HIGH); 
-        pinMode(_DhtPin, OUTPUT);
+    // Force DhtPin pins high to end a previous transaction.
+    // This effectively timeouts the sensor.
+    if (DeviceConfig.getEnviro() == DC_Enviro_DHT11_AM2302_12_2) {        
+        digitalWrite(DhtPin_V11, HIGH); 
+        pinMode(DhtPin_V11, OUTPUT);
+        digitalWrite(DhtPin_V13, HIGH); 
+        pinMode(DhtPin_V13, OUTPUT);
     }
 
     // Init Analog sensing if it is attached
@@ -102,9 +83,7 @@ void SensorsClass::Init(EC_12S_t *const errorCodePtr) {
         AnalogRun();
     }    
 
-    // With the battery voltage known, display it on the screen while waiting
-    // a period of time.
-    // This also helps with the DHT sensor to ensure it has timed out.
+    // With the battery voltage known, display it on the screen.
     if (DeviceConfig.getDisplay()) {
         if (GetBatteryVoltage() < 1.0f) {
             Display.SetAllPixelsOn();
@@ -113,24 +92,67 @@ void SensorsClass::Init(EC_12S_t *const errorCodePtr) {
             Display.ManualWriteStringStart();
         }
     }
-        
+
+    // Waiting a period of time, do things within the wait period.
     for (uint8_t i = 0; i < 4; i++) {
         delay(500);
 
+        // Invert the battery voltage on the display.
         if (DeviceConfig.getDisplay()) {
             Display.Invert();
             Display.WriteBuffer();
         }
-    }    
+
+        // Begin detecting the DHT sensor. 
+        // This wait loop is important. At i==1 we have waited 1 second 
+        // for the previous DhtPin pin setting to timeout the DHTs.
+        // We can now try and auto detect the DHTs and then wait another second!
+        if (i == 1 && DeviceConfig.getEnviro() == DC_Enviro_DHT11_AM2302_12_2) {
+            // First try and detect a DHT sensor on the V1.3 hardware pin.
+            _Dhtesp.setup(DhtPin_V13, DHTesp::AUTO_DETECT);
+        }
+    }   
 
     // Setup the DHT - temperature and humidty sensor
-    if (DeviceConfig.getEnviro() == DC_Enviro_DHT11_2 || DeviceConfig.getEnviro() == DC_Enviro_AM2302_12) {
-        _Dhtesp.setup(_DhtPin, _DhtModel);
-        _DhtTID = GlobalTimer.setInterval(_DhtRunInerval, DhtRun);
+    if (DeviceConfig.getEnviro() == DC_Enviro_DHT11_AM2302_12_2) {      
 
-        // Log an error if the DHT11 status is not 0
-        DhtRun();   // Run the DHT11 sensor to update the status
-        ErrorCode_12SLog(errorCodePtr, _Dhtesp.getStatus() != 0);
+        // Force the sensor menthod to run to see if it was detected
+        // on the V1.3 hardware pin.
+        DhtRun(); 
+
+        if (_Dhtesp.getStatus() == DHTesp::ERROR_NONE) {
+            // Fantastic! The sensor is attached to DhtPin_V13.
+
+            // Different sensors have a different minimum polling period
+            if (_Dhtesp.getModel() == DHTesp::DHT22 || _Dhtesp.getModel() == DHTesp::AM2302)
+                runInerval = 2200u;
+
+            else if (_Dhtesp.getModel() == DHTesp::DHT11)
+                runInerval = 1500u;
+
+            ErrorCode_12SLog(errorCodePtr, ErrorCode_PASS);
+        }
+
+        else {
+            // Try to detect the DHT11 on the V1.1 hardware pin
+            _Dhtesp.setup(DhtPin_V11, DHTesp::DHT11);
+
+            // Force the sensor menthod to run to see if it was detected
+            DhtRun(); 
+
+            if (_Dhtesp.getStatus() == DHTesp::ERROR_NONE) {
+                // Fantastic! The sensor is attached to DhtPin_V11.
+                runInerval = 1500u;
+                ErrorCode_12SLog(errorCodePtr, ErrorCode_PASS);
+            }
+
+            else
+                ErrorCode_12SLog(errorCodePtr, ErrorCode_FAIL);            
+        }
+
+        // Schedule the DHT to periodically run if a valid sensor was detected
+        if (runInerval)
+            _DhtTID = GlobalTimer.setInterval(runInerval, DhtRun);        
     }
 
     // Setup the Accelerometer
@@ -145,16 +167,6 @@ void SensorsClass::Init(EC_12S_t *const errorCodePtr) {
         // Log an error if Pedometer.Init() failed
         ErrorCode_12SLog(errorCodePtr, pedometerSuccess == false);
     }
-
-    // Setup the Time of Flight sensor
-    byte tofSuccess = false;
-    if (_TofSensor.Init()) {
-        tofSuccess = true;
-        TofRun();   // Run the accelerometer once, schedule for periodic run
-        _TofTID = GlobalTimer.setInterval(Tof_RunInerval, TofRun);
-    }
-    // Log an error if Distance.Init() failed
-    ErrorCode_12SLog(errorCodePtr, tofSuccess == false);
 }
 
 void SensorsClass::ShowOnDisplay(uint8_t const show, uint8_t const vpin) {
@@ -174,8 +186,6 @@ void SensorsClass::ShowOnDisplay(uint8_t const show, uint8_t const vpin) {
         Display.SetNumber(show, StepCount);
     } else if (vpin == Orientation_Vpin) {
         Display.SetNumber(show, Orientation);
-    } else if (vpin == Distance_Vpin) {
-        Display.SetNumber(show, GetDistance());
     }
 }
 
@@ -196,10 +206,18 @@ void SensorsClass::DhtRun() {
     }
 
 #ifdef DHT11_Debug
-    Serial.print("DHT11 Debug");
+    Serial.print("DHT Debug");
     Serial.print("\t");
     Serial.print(_Dhtesp.getStatusString());
     Serial.print("\t");
+    Serial.print(_Dhtesp.getModel());
+    Serial.print("\t");
+    Serial.print(_Dhtesp.getPin());
+    Serial.print("\t");
+    Serial.print(tempT);
+    Serial.print("\t\t");
+    Serial.print(tempH);
+    Serial.print("\t\t");
     Serial.print(GetTemperature(), 1);
     Serial.print("\t\t");
     Serial.print(GetHumidity(), 1);
@@ -210,35 +228,50 @@ void SensorsClass::DhtRun() {
 #endif
 }
 
+uint8_t SensorsClass::GetDhtPin() {
+    if (_DhtTID != -1)
+        return _Dhtesp.getPin();
+    else
+        return 0;    
+}
+
 float SensorsClass::ConvertTemperature(uint16_t const rawT) {
-    int16_t convRawTemp;
+    float convRawTemp = 0;
 
-    if (_DhtModel == DHTesp::DHT11)
-        return ((float)rawT / 256.0f) - 4.0f;
+    if (_Dhtesp.getModel() == DHTesp::DHT11) {
+        convRawTemp = (rawT >> 8) + ((rawT & 0x00FF) * 0.1);
+    }
 
-    else if (_DhtModel == DHTesp::AM2302) {
+    else if (_Dhtesp.getModel() == DHTesp::DHT22 || _Dhtesp.getModel() == DHTesp::AM2302) {
         if ( rawT & 0x8000 ) {
             convRawTemp = -(int16_t)(rawT & 0x7FFF);
         } else {
             convRawTemp = (int16_t)rawT;
         }
-        return convRawTemp * 0.1;
+        convRawTemp *= 0.1;
     }
 
-    else
-        return 0;
-    
+    return convRawTemp + _tempOffset;    
 }
 
 float SensorsClass::ConvertHumidity(uint16_t const rawH) {
-    if (_DhtModel == DHTesp::DHT11)
-        return (float)rawH / 256.0f;
+    float convRawHum = 0;
 
-    else if (_DhtModel == DHTesp::AM2302)
-        return (float)rawH * 0.1;
+    if (_Dhtesp.getModel() == DHTesp::DHT11)
+        convRawHum = (rawH >> 8) + ((rawH & 0x00FF) * 0.1);
 
-    else
-        return 0;
+    else if (_Dhtesp.getModel() == DHTesp::DHT22 || _Dhtesp.getModel() == DHTesp::AM2302)
+        convRawHum = (float)rawH * 0.1;
+
+    return convRawHum + _humOffset;
+}
+
+void SensorsClass::SetTemperatureOffset(float const offset) {
+    _tempOffset = offset;
+}
+
+void SensorsClass::SetHumidityOffset(float const offset) {
+    _humOffset = offset;
 }
 
 float SensorsClass::GetTemperature() {
@@ -306,10 +339,6 @@ float SensorsClass::GetLightLux() {
     return ConvertLightLux(RawLightLux);
 }
 
-uint16_t SensorsClass::GetDistance() {
-    return RawDistance;
-}
-
 void SensorsClass::AccRun() {    
     // Update pedometer
     _Pedometer.Update();
@@ -335,13 +364,4 @@ void SensorsClass::AccRun() {
 #endif
 }
 
-void SensorsClass::TofRun() {
-    // Update distance reading
-    RawDistance = _TofSensor.GetDistance();
-    if (DeviceConfig.getDisplay()) {
-        if (ShowOnDisplayPrimary == Distance_Vpin) {
-            ShowOnDisplay(Display_PRIMARY_Show, ShowOnDisplayPrimary);
-        }
-    }
-}
 // Sensors.cpp EOF

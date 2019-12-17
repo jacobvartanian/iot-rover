@@ -7,7 +7,7 @@
   - Very low memory footprint
   - Very small code
 
-  https://github.com/beegee-tokyo/arduino-DHTesp
+  https://github.com/beegee-tokyo/DHTesp
 
   Written by Mark Ruys, mark@paracas.nl.
   Updated to work with ESP32 by Bernd Giesecke, bernd@giesecke.tk
@@ -34,10 +34,13 @@
     2018-01-03: Added function getTempAndHumidity which returns temperature and humidity in one call.
     2018-01-03: Added retry in case the reading from the sensor fails with a timeout.
     2018-01-08: Added ESP8266 (and probably AVR) compatibility.
-    2018-03-11: Updated DHT example    
-    2018-06-19: Updated DHT example to distinguish between ESP8266 examples and ESP32 examples    
-    2018-07-06: Fixed bug in ESP32 example   
-    2018^07-17: Use correct field separator in keywords.txt + corrected wrong deprecation
+    2018-03-11: Updated DHT example
+    2018-06-19: Updated DHT example to distinguish between ESP8266 examples and ESP32 examples
+    2018-07-06: Fixed bug in ESP32 example
+    2018-07-17: Use correct field separator in keywords.txt + corrected wrong deprecation
+    2019-03-07: Added computeAbsoluteHumidity which returns the absolute humidity in g/m³
+    2019-03-22: Fixed auto detection problem
+    2019-07-26: Added getPin function
  ******************************************************************/
 
 #ifndef dhtesp_h
@@ -126,12 +129,10 @@ public:
   void setup(uint8_t pin, DHT_MODEL_t model=AUTO_DETECT);
   void resetTimer();
 
-  float getTemperature();
-  float getHumidity();
-
   uint16_t getRawTemperature();
   uint16_t getRawHumidity();
-  
+  float getTemperature();
+  float getHumidity();
   TempAndHumidity getTempAndHumidity();
 
   DHT_ERROR_t getStatus() { return error; };
@@ -158,10 +159,12 @@ public:
   ComfortProfile getComfortProfile() {return m_comfort;}
   void setComfortProfile(ComfortProfile& c) {m_comfort = c;}
   inline bool isTooHot(float temp, float humidity) {return m_comfort.isTooHot(temp, humidity);}
-	inline bool isTooHumid(float temp, float humidity) {return m_comfort.isTooHumid(temp, humidity);}
-	inline bool isTooCold(float temp, float humidity) {return m_comfort.isTooCold(temp, humidity);}
-	inline bool isTooDry(float temp, float humidity) {return m_comfort.isTooDry(temp, humidity);}
+  inline bool isTooHumid(float temp, float humidity) {return m_comfort.isTooHumid(temp, humidity);}
+  inline bool isTooCold(float temp, float humidity) {return m_comfort.isTooCold(temp, humidity);}
+  inline bool isTooDry(float temp, float humidity) {return m_comfort.isTooDry(temp, humidity);}
   byte computePerception(float temperature, float percentHumidity, bool isFahrenheit=false);
+  float computeAbsoluteHumidity(float temperature, float percentHumidity, bool isFahrenheit=false);
+  uint8_t getPin() { return pin; }
 protected:
   void readSensor();
 
